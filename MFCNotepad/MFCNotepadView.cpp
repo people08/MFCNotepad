@@ -106,6 +106,19 @@ BEGIN_MESSAGE_MAP(CMFCNotepadView, CView)
     ON_UPDATE_COMMAND_UI(ID_EDIT_UNDO, &CMFCNotepadView::OnUpdateEditUndo)
     ON_UPDATE_COMMAND_UI(ID_EDIT_REDO, &CMFCNotepadView::OnUpdateEditRedo)
 
+    // 新增编辑命令映射
+    ON_COMMAND(ID_EDIT_CUT, &CMFCNotepadView::OnEditCut)
+    ON_COMMAND(ID_EDIT_COPY, &CMFCNotepadView::OnEditCopy)
+    ON_COMMAND(ID_EDIT_PASTE, &CMFCNotepadView::OnEditPaste)
+    ON_COMMAND(ID_EDIT_CLEAR, &CMFCNotepadView::OnEditClear)
+    ON_COMMAND(ID_EDIT_SELECT_ALL, &CMFCNotepadView::OnEditSelectAll)
+
+    ON_UPDATE_COMMAND_UI(ID_EDIT_CUT, &CMFCNotepadView::OnUpdateEditCut)
+    ON_UPDATE_COMMAND_UI(ID_EDIT_COPY, &CMFCNotepadView::OnUpdateEditCopy)
+    ON_UPDATE_COMMAND_UI(ID_EDIT_PASTE, &CMFCNotepadView::OnUpdateEditPaste)
+    ON_UPDATE_COMMAND_UI(ID_EDIT_CLEAR, &CMFCNotepadView::OnUpdateEditClear)
+    ON_UPDATE_COMMAND_UI(ID_EDIT_SELECT_ALL, &CMFCNotepadView::OnUpdateEditSelectAll)
+
     ON_COMMAND(ID_VIEW_LINENUMBERS, &CMFCNotepadView::OnViewLineNumbers)
     ON_COMMAND(ID_VIEW_THEME_LIGHT, &CMFCNotepadView::OnViewThemeLight)
     ON_COMMAND(ID_VIEW_THEME_DARK, &CMFCNotepadView::OnViewThemeDark)
@@ -520,3 +533,94 @@ void CMFCNotepadView::OnViewFontReset() { m_nFontSize = 12; UpdateFont(); }
 void CMFCNotepadView::OnUpdateViewLineNumbers(CCmdUI* pCmdUI) { pCmdUI->SetCheck(m_bShowLineNum); }
 void CMFCNotepadView::OnUpdateViewThemeLight(CCmdUI* pCmdUI) { pCmdUI->SetRadio(theApp.m_theme == THEME_LIGHT); }
 void CMFCNotepadView::OnUpdateViewThemeDark(CCmdUI* pCmdUI) { pCmdUI->SetRadio(theApp.m_theme == THEME_DARK); }
+
+// ===== 新增命令实现 =====
+
+void CMFCNotepadView::OnEditCut()
+{
+    if (m_wndEdit.GetSafeHwnd()) {
+        m_wndEdit.Cut();
+        SyncToDoc();
+        CMFCNotepadDoc* pDoc = GetDocument();
+        if (pDoc) pDoc->SetModifiedFlag(TRUE);
+    }
+}
+
+void CMFCNotepadView::OnEditCopy()
+{
+    if (m_wndEdit.GetSafeHwnd()) {
+        m_wndEdit.Copy();
+    }
+}
+
+void CMFCNotepadView::OnEditPaste()
+{
+    if (m_wndEdit.GetSafeHwnd() && (::IsClipboardFormatAvailable(CF_TEXT) || ::IsClipboardFormatAvailable(CF_UNICODETEXT))) {
+        m_wndEdit.Paste();
+        SyncToDoc();
+        CMFCNotepadDoc* pDoc = GetDocument();
+        if (pDoc) pDoc->SetModifiedFlag(TRUE);
+    }
+}
+
+void CMFCNotepadView::OnEditClear()
+{
+    if (m_wndEdit.GetSafeHwnd()) {
+        int s = 0, e = 0;
+        m_wndEdit.GetSel(s, e);
+        if (s != e) {
+            m_wndEdit.ReplaceSel(_T(""));
+            SyncToDoc();
+            CMFCNotepadDoc* pDoc = GetDocument();
+            if (pDoc) pDoc->SetModifiedFlag(TRUE);
+        }
+    }
+}
+
+void CMFCNotepadView::OnEditSelectAll()
+{
+    if (m_wndEdit.GetSafeHwnd()) {
+        m_wndEdit.SetSel(0, -1);
+        m_wndEdit.SetFocus();
+    }
+}
+
+// ===== Update UI 实现 =====
+
+void CMFCNotepadView::OnUpdateEditCut(CCmdUI* pCmdUI)
+{
+    if (!m_wndEdit.GetSafeHwnd()) { pCmdUI->Enable(FALSE); return; }
+    int s = 0, e = 0;
+    m_wndEdit.GetSel(s, e);
+    pCmdUI->Enable(s != e);
+}
+
+void CMFCNotepadView::OnUpdateEditCopy(CCmdUI* pCmdUI)
+{
+    if (!m_wndEdit.GetSafeHwnd()) { pCmdUI->Enable(FALSE); return; }
+    int s = 0, e = 0;
+    m_wndEdit.GetSel(s, e);
+    pCmdUI->Enable(s != e);
+}
+
+void CMFCNotepadView::OnUpdateEditPaste(CCmdUI* pCmdUI)
+{
+    BOOL can = (::IsClipboardFormatAvailable(CF_TEXT) || ::IsClipboardFormatAvailable(CF_UNICODETEXT));
+    pCmdUI->Enable(can);
+}
+
+void CMFCNotepadView::OnUpdateEditClear(CCmdUI* pCmdUI)
+{
+    if (!m_wndEdit.GetSafeHwnd()) { pCmdUI->Enable(FALSE); return; }
+    int s = 0, e = 0;
+    m_wndEdit.GetSel(s, e);
+    pCmdUI->Enable(s != e);
+}
+
+void CMFCNotepadView::OnUpdateEditSelectAll(CCmdUI* pCmdUI)
+{
+    if (!m_wndEdit.GetSafeHwnd()) { pCmdUI->Enable(FALSE); return; }
+    CString txt;
+    m_wndEdit.GetWindowText(txt);
+    pCmdUI->Enable(!txt.IsEmpty());
+}

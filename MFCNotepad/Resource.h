@@ -3,7 +3,7 @@
 // 标准资源
 #define IDR_MAINFRAME                   128
 #define IDR_MFCNOTEPADTYPE              129
-#define IDR_MFCNotepadTYPE 129
+#define IDR_MFCNotepadTYPE				129
 #define IDD_ABOUTBOX                    100
 #define IDD_FIND_REPLACE                101
 
@@ -34,5 +34,5 @@
 // OLE 初始化失败
 #define IDP_OLE_INIT_FAILED             100
 
-#define IDS_TOOLBAR_STANDARD    110
-#define IDS_TOOLBAR_CUSTOMIZE    111
+#define IDS_TOOLBAR_STANDARD			110
+#define IDS_TOOLBAR_CUSTOMIZE			111

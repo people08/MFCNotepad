@@ -69,6 +69,19 @@ public:
     afx_msg void OnUpdateEditUndo(CCmdUI* pCmdUI);
     afx_msg void OnUpdateEditRedo(CCmdUI* pCmdUI);
 
+    // 新增：常用编辑命令（剪切/复制/粘贴/清除/全选）
+    afx_msg void OnEditCut();
+    afx_msg void OnEditCopy();
+    afx_msg void OnEditPaste();
+    afx_msg void OnEditClear();
+    afx_msg void OnEditSelectAll();
+
+    afx_msg void OnUpdateEditCut(CCmdUI* pCmdUI);
+    afx_msg void OnUpdateEditCopy(CCmdUI* pCmdUI);
+    afx_msg void OnUpdateEditPaste(CCmdUI* pCmdUI);
+    afx_msg void OnUpdateEditClear(CCmdUI* pCmdUI);
+    afx_msg void OnUpdateEditSelectAll(CCmdUI* pCmdUI);
+
     // 视图命令
     afx_msg void OnViewLineNumbers();
     afx_msg void OnViewThemeLight();
