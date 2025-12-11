@@ -217,6 +217,7 @@
     <Image Include="res\MFCNotepad.ico" />
     <Image Include="res\MFCNotepadDoc.ico" />
     <Image Include="res\Toolbar.bmp" />
+    <Image Include="res\Toolbar256.bmp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
