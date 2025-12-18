@@ -1,4 +1,5 @@
-﻿#pragma once
+﻿// MFCNotepadView.h - 修复行号实时更新
+#pragma once
 
 #include "MFCNotepadDoc.h"
 
@@ -10,6 +11,23 @@ struct FindOptions {
     BOOL matchCase;
 };
 
+// ========== 自定义编辑控件（用于捕获滚动消息）==========
+class CLineNumEdit : public CEdit
+{
+public:
+    CLineNumEdit() : m_pParentView(NULL) {}
+    void SetParentView(CView* pView) { m_pParentView = pView; }
+
+protected:
+    CView* m_pParentView;
+
+    // 重写窗口过程以捕获滚动消息
+    virtual LRESULT WindowProc(UINT message, WPARAM wParam, LPARAM lParam);
+
+    DECLARE_MESSAGE_MAP()
+};
+
+// ========== 视图类 ==========
 class CMFCNotepadView : public CView
 {
     DECLARE_DYNCREATE(CMFCNotepadView)
@@ -27,8 +45,11 @@ public:
     // 查找
     FindOptions m_findOpt;
 
+    // 刷新行号区域（供子类化的CEdit调用）
+    void InvalidateLineNumArea();
+
 protected:
-    CEdit m_wndEdit;        // 编辑控件
+    CLineNumEdit m_wndEdit; // 使用自定义编辑控件
     CFont m_font;           // 当前字体
     CBrush m_brushBg;       // 背景画刷
     int m_nLineNumWidth;    // 行号区宽度
@@ -42,7 +63,7 @@ protected:
     void SyncFromDoc();
 
 public:
-    // 提供编辑控件的只读访问接口
+    // 提供编辑控件的访问接口
     const CEdit& GetEditCtrl() const { return m_wndEdit; }
     CEdit& GetEditCtrl() { return m_wndEdit; }
 
@@ -62,7 +83,7 @@ public:
     afx_msg HBRUSH OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor);
     afx_msg LRESULT OnThemeChanged(WPARAM, LPARAM);
 
-    // ========== 标准编辑命令（新增）==========
+    // 标准编辑命令
     afx_msg void OnEditCopy();
     afx_msg void OnEditCut();
     afx_msg void OnEditPaste();

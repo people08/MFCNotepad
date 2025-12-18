@@ -1,4 +1,5 @@
-﻿#include "pch.h"
+﻿// MFCNotepadView.cpp - 修复行号实时更新
+#include "pch.h"
 #include "MFCNotepad.h"
 #include "MFCNotepadDoc.h"
 #include "MFCNotepadView.h"
@@ -7,6 +8,36 @@
 
 #define IDC_EDIT 1001
 #define WM_THEMECHANGED (WM_USER + 100)
+
+// ========== 自定义编辑控件实现 ==========
+BEGIN_MESSAGE_MAP(CLineNumEdit, CEdit)
+END_MESSAGE_MAP()
+
+LRESULT CLineNumEdit::WindowProc(UINT message, WPARAM wParam, LPARAM lParam)
+{
+    // 先调用基类处理
+    LRESULT result = CEdit::WindowProc(message, wParam, lParam);
+
+    // 在以下情况下通知父视图刷新行号：
+    switch (message)
+    {
+    case WM_VSCROLL:        // 垂直滚动条滚动
+    case WM_MOUSEWHEEL:     // 鼠标滚轮
+    case WM_KEYDOWN:        // 按键（可能导致滚动，如Page Up/Down, 方向键）
+    case WM_KEYUP:
+    case EM_LINESCROLL:     // 程序控制的滚动
+    case EM_SCROLL:
+    case WM_SIZE:           // 大小改变
+        if (m_pParentView)
+        {
+            // 通知父视图刷新行号区域
+            ((CMFCNotepadView*)m_pParentView)->InvalidateLineNumArea();
+        }
+        break;
+    }
+
+    return result;
+}
 
 // ========== 查找替换对话框 ==========
 class CFindReplaceDlgEx : public CDialogEx
@@ -89,7 +120,7 @@ BEGIN_MESSAGE_MAP(CMFCNotepadView, CView)
     ON_WM_CTLCOLOR()
     ON_MESSAGE(WM_THEMECHANGED, &CMFCNotepadView::OnThemeChanged)
 
-    // ========== 标准编辑命令（新增）==========
+    // 标准编辑命令
     ON_COMMAND(ID_EDIT_COPY, &CMFCNotepadView::OnEditCopy)
     ON_COMMAND(ID_EDIT_CUT, &CMFCNotepadView::OnEditCut)
     ON_COMMAND(ID_EDIT_PASTE, &CMFCNotepadView::OnEditPaste)
@@ -140,7 +171,6 @@ BOOL CMFCNotepadView::PreCreateWindow(CREATESTRUCT& cs)
     return CView::PreCreateWindow(cs);
 }
 
-// ========== PreTranslateMessage：只拦截自定义快捷键 ==========
 BOOL CMFCNotepadView::PreTranslateMessage(MSG* pMsg)
 {
     if (pMsg->message == WM_KEYDOWN)
@@ -148,13 +178,9 @@ BOOL CMFCNotepadView::PreTranslateMessage(MSG* pMsg)
         BOOL bCtrl = (::GetKeyState(VK_CONTROL) & 0x8000) != 0;
         BOOL bShift = (::GetKeyState(VK_SHIFT) & 0x8000) != 0;
 
-        // 只拦截自定义快捷键，不拦截标准编辑快捷键（Ctrl+C/V/X/A）
-        // 标准编辑快捷键让它们通过正常的命令路由
-
-        // Ctrl+Z - 撤销（需要拦截，因为 CEdit 有自己的撤销）
+        // Ctrl+Z - 撤销
         if (bCtrl && !bShift && pMsg->wParam == 'Z')
         {
-            TRACE("PreTranslateMessage: Ctrl+Z 被拦截\n");
             OnEditUndo();
             return TRUE;
         }
@@ -163,7 +189,6 @@ BOOL CMFCNotepadView::PreTranslateMessage(MSG* pMsg)
         if ((bCtrl && !bShift && pMsg->wParam == 'Y') ||
             (bCtrl && bShift && pMsg->wParam == 'Z'))
         {
-            TRACE("PreTranslateMessage: Ctrl+Y/Ctrl+Shift+Z 被拦截\n");
             OnEditRedo();
             return TRUE;
         }
@@ -181,8 +206,6 @@ BOOL CMFCNotepadView::PreTranslateMessage(MSG* pMsg)
             OnEditReplace();
             return TRUE;
         }
-
-        // 不拦截其他快捷键（Ctrl+C/V/X/A 等），让它们正常处理
     }
 
     return CView::PreTranslateMessage(pMsg);
@@ -206,9 +229,10 @@ int CMFCNotepadView::OnCreate(LPCREATESTRUCT lpCreateStruct)
         return -1;
     }
 
-    m_wndEdit.SetLimitText(0);
-    TRACE("编辑控件创建成功，ID=%d\n", IDC_EDIT);
+    // 设置父视图指针，用于滚动时通知刷新
+    m_wndEdit.SetParentView(this);
 
+    m_wndEdit.SetLimitText(0);
     UpdateFont();
     UpdateColors();
     return 0;
@@ -278,6 +302,17 @@ void CMFCNotepadView::SyncFromDoc()
     }
 }
 
+// ========== 刷新行号区域（关键函数）==========
+void CMFCNotepadView::InvalidateLineNumArea()
+{
+    if (!m_bShowLineNum) return;
+
+    CRect rect;
+    GetClientRect(&rect);
+    rect.right = m_nLineNumWidth;  // 只刷新行号区域
+    InvalidateRect(&rect, TRUE);
+}
+
 void CMFCNotepadView::OnDraw(CDC* pDC)
 {
     if (!m_bShowLineNum) return;
@@ -287,7 +322,9 @@ void CMFCNotepadView::OnDraw(CDC* pDC)
     GetClientRect(&rect);
     rect.right = m_nLineNumWidth;
 
+    // 填充行号背景
     pDC->FillSolidRect(&rect, tc.lineNumBg);
+    // 绘制分隔线
     pDC->FillSolidRect(m_nLineNumWidth - 1, 0, 1, rect.Height(), tc.lineNumText);
 
     CFont* pOldFont = pDC->SelectObject(&m_font);
@@ -301,6 +338,7 @@ void CMFCNotepadView::OnDraw(CDC* pDC)
     int totalLines = m_wndEdit.GetLineCount();
     int visibleLines = rect.Height() / lineHeight + 2;
 
+    // 绘制行号
     for (int i = 0; i < visibleLines && (firstLine + i) < totalLines; i++) {
         CString str;
         str.Format(_T("%d"), firstLine + i + 1);
@@ -343,17 +381,9 @@ LRESULT CMFCNotepadView::OnThemeChanged(WPARAM, LPARAM)
 void CMFCNotepadView::OnEditChange()
 {
     CMFCNotepadDoc* pDoc = GetDocument();
-    if (!pDoc)
-    {
-        TRACE("OnEditChange: 文档为空!\n");
-        return;
-    }
+    if (!pDoc) return;
 
-    if (m_bSkipUndo)
-    {
-        TRACE("OnEditChange: 跳过撤销记录\n");
-        return;
-    }
+    if (m_bSkipUndo) return;
 
     CString newText;
     m_wndEdit.GetWindowText(newText);
@@ -364,93 +394,61 @@ void CMFCNotepadView::OnEditChange()
     if (pDoc->m_strContent != newText)
     {
         pDoc->SaveUndoState(pDoc->m_strContent, start, end);
-        TRACE("OnEditChange: 保存撤销状态，栈大小=%d\n", pDoc->m_undoStack.size());
     }
 
     pDoc->m_strContent = newText;
     pDoc->SetModifiedFlag(TRUE);
 
+    // 检查行号宽度是否需要更新
     int newWidth = CalcLineNumWidth();
     if (newWidth != m_nLineNumWidth)
     {
         m_nLineNumWidth = newWidth;
         UpdateLayout();
     }
+    else
+    {
+        // 即使宽度不变，也要刷新行号区域（因为行数可能变了）
+        InvalidateLineNumArea();
+    }
 }
 
 // ========== 标准编辑命令实现 ==========
-void CMFCNotepadView::OnEditCopy()
-{
-    TRACE("OnEditCopy 被调用\n");
-    m_wndEdit.Copy();
-}
-
-void CMFCNotepadView::OnEditCut()
-{
-    TRACE("OnEditCut 被调用\n");
-    m_wndEdit.Cut();
-}
-
-void CMFCNotepadView::OnEditPaste()
-{
-    TRACE("OnEditPaste 被调用\n");
-    m_wndEdit.Paste();
-}
-
-void CMFCNotepadView::OnEditSelectAll()
-{
-    TRACE("OnEditSelectAll 被调用\n");
-    m_wndEdit.SetSel(0, -1);
-}
+void CMFCNotepadView::OnEditCopy() { m_wndEdit.Copy(); }
+void CMFCNotepadView::OnEditCut() { m_wndEdit.Cut(); }
+void CMFCNotepadView::OnEditPaste() { m_wndEdit.Paste(); }
+void CMFCNotepadView::OnEditSelectAll() { m_wndEdit.SetSel(0, -1); }
 
 void CMFCNotepadView::OnUpdateEditCopy(CCmdUI* pCmdUI)
 {
     int start, end;
     m_wndEdit.GetSel(start, end);
-    BOOL bHasSelection = (start != end);
-    pCmdUI->Enable(bHasSelection);
+    pCmdUI->Enable(start != end);
 }
 
 void CMFCNotepadView::OnUpdateEditCut(CCmdUI* pCmdUI)
 {
     int start, end;
     m_wndEdit.GetSel(start, end);
-    BOOL bHasSelection = (start != end);
-    pCmdUI->Enable(bHasSelection);
+    pCmdUI->Enable(start != end);
 }
 
 void CMFCNotepadView::OnUpdateEditPaste(CCmdUI* pCmdUI)
 {
-    // 检查剪贴板是否有文本
-    BOOL bCanPaste = IsClipboardFormatAvailable(CF_TEXT) ||
-        IsClipboardFormatAvailable(CF_UNICODETEXT);
-    pCmdUI->Enable(bCanPaste);
+    pCmdUI->Enable(IsClipboardFormatAvailable(CF_TEXT) ||
+        IsClipboardFormatAvailable(CF_UNICODETEXT));
 }
 
 void CMFCNotepadView::OnUpdateEditSelectAll(CCmdUI* pCmdUI)
 {
-    // 有内容就可以全选
-    BOOL bHasText = (m_wndEdit.GetWindowTextLength() > 0);
-    pCmdUI->Enable(bHasText);
+    pCmdUI->Enable(m_wndEdit.GetWindowTextLength() > 0);
 }
 
 // ========== 自定义编辑命令 ==========
 void CMFCNotepadView::OnEditUndo()
 {
     CMFCNotepadDoc* pDoc = GetDocument();
-    if (!pDoc)
-    {
-        TRACE("OnEditUndo: 文档为空\n");
-        return;
-    }
-
-    if (!pDoc->CanUndo())
-    {
-        TRACE("OnEditUndo: 无法撤销，栈为空\n");
-        return;
-    }
-
-    TRACE("OnEditUndo: 执行撤销，栈大小=%d\n", pDoc->m_undoStack.size());
+    if (!pDoc || !pDoc->CanUndo()) return;
 
     CString curText;
     m_wndEdit.GetWindowText(curText);
@@ -468,25 +466,14 @@ void CMFCNotepadView::OnEditUndo()
     pDoc->m_strContent = item.text;
     m_bSkipUndo = FALSE;
 
-    TRACE("OnEditUndo: 撤销完成，剩余栈大小=%d\n", pDoc->m_undoStack.size());
+    // 刷新行号
+    InvalidateLineNumArea();
 }
 
 void CMFCNotepadView::OnEditRedo()
 {
     CMFCNotepadDoc* pDoc = GetDocument();
-    if (!pDoc)
-    {
-        TRACE("OnEditRedo: 文档为空\n");
-        return;
-    }
-
-    if (!pDoc->CanRedo())
-    {
-        TRACE("OnEditRedo: 无法重做，栈为空\n");
-        return;
-    }
-
-    TRACE("OnEditRedo: 执行重做，栈大小=%d\n", pDoc->m_redoStack.size());
+    if (!pDoc || !pDoc->CanRedo()) return;
 
     CString curText;
     m_wndEdit.GetWindowText(curText);
@@ -504,21 +491,20 @@ void CMFCNotepadView::OnEditRedo()
     pDoc->m_strContent = item.text;
     m_bSkipUndo = FALSE;
 
-    TRACE("OnEditRedo: 重做完成，剩余栈大小=%d\n", pDoc->m_redoStack.size());
+    // 刷新行号
+    InvalidateLineNumArea();
 }
 
 void CMFCNotepadView::OnUpdateEditUndo(CCmdUI* pCmdUI)
 {
     CMFCNotepadDoc* pDoc = GetDocument();
-    BOOL bCanUndo = (pDoc && pDoc->CanUndo());
-    pCmdUI->Enable(bCanUndo);
+    pCmdUI->Enable(pDoc && pDoc->CanUndo());
 }
 
 void CMFCNotepadView::OnUpdateEditRedo(CCmdUI* pCmdUI)
 {
     CMFCNotepadDoc* pDoc = GetDocument();
-    BOOL bCanRedo = (pDoc && pDoc->CanRedo());
-    pCmdUI->Enable(bCanRedo);
+    pCmdUI->Enable(pDoc && pDoc->CanRedo());
 }
 
 // ========== 查找/替换 ==========
@@ -659,6 +645,9 @@ int CMFCNotepadView::DoReplaceAll()
         SyncToDoc();
         if (pDoc) pDoc->SetModifiedFlag(TRUE);
         m_bSkipUndo = FALSE;
+
+        // 刷新行号
+        InvalidateLineNumArea();
     }
     return count;
 }
